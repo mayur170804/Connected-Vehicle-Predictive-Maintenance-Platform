@@ -194,3 +194,16 @@ twice results in exactly one row — proving the idempotency requirement at
 the persistence layer.
 
 Python suites (`pytest`) will apply starting Phase 3 (risk-service rules).
+
+## Development Progress
+
+- [x] Phase 0 — Project scaffolding
+- [x] Phase 1 — Vehicle CRUD + JWT authentication
+- [x] Phase 2 — Kafka telemetry ingestion
+- [x] Phase 3 — Risk scoring service
+- [ ] Phase 4 — Risk integration + maintenance tickets
+- [ ] Phase 5 — REST API completion + role enforcement
+- [ ] Phase 6 — Dashboard completion
+- [ ] Phase 7 — Final testing + documentation
+
+See `CHANGELOG.md` for development notes.
