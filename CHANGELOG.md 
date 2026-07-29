@@ -1,0 +1,54 @@
+# Development Changelog
+
+## 29 July 2026
+
+### Status
+
+Phases 0–3 completed.
+
+### Phase 2 — Telemetry Pipeline
+
+- Completed vehicle telemetry simulator.
+- Simulator creates/reuses 5 vehicles.
+- Publishes telemetry every 5 seconds.
+- Telemetry flows through:
+  `Simulator → Kafka → Spring Boot → PostgreSQL`
+- Verified stored telemetry using the REST API.
+- Added controlled telemetry anomalies.
+- Added critical fault codes `P0217` and `P0300`.
+
+### Phase 3 — Risk Scoring
+
+- Implemented FastAPI risk scoring service.
+- Added `POST /score`.
+- Risk levels:
+  - `LOW` — normal telemetry
+  - `MEDIUM` — warning conditions
+  - `HIGH` — critical conditions
+- Added rule and API tests.
+- 12 pytest tests passing.
+
+### Dashboard
+
+- Added JWT login/logout.
+- Added telemetry-service health status.
+- Added total vehicle count.
+- Added fleet overview with simulated vehicles.
+- Fixed frontend/backend CORS configuration.
+
+### Infrastructure
+
+- Fixed Kafka KRaft cluster startup.
+- Fixed dashboard Docker/CSS build issue.
+- Verified Docker services communicate correctly.
+
+### Next — Phase 4
+
+Connect the complete predictive-maintenance workflow:
+
+`Telemetry → Risk Service → Risk Level → Maintenance Ticket → maintenance-alerts Kafka topic`
+
+For HIGH-risk telemetry:
+- Store the calculated risk.
+- Create an idempotent maintenance ticket.
+- Publish a maintenance alert.
