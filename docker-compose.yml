@@ -1,0 +1,125 @@
+version: "3.8"
+
+services:
+
+  # ---------- Kafka (KRaft mode, no Zookeeper needed) ----------
+  kafka:
+    image: confluentinc/cp-kafka:7.6.0
+    container_name: cvpm-kafka
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093,PLAINTEXT_HOST://0.0.0.0:29092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:29092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      CLUSTER_ID: "cvpm-cluster-1"
+    healthcheck:
+      test: ["CMD", "kafka-broker-api-versions", "--bootstrap-server", "localhost:9092"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    container_name: cvpm-kafka-ui
+    ports:
+      - "8081:8080"
+    environment:
+      KAFKA_CLUSTERS_0_NAME: local
+      KAFKA_CLUSTERS_0_BOOTSTRASERVERS: kafka:9092
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9092
+    depends_on:
+      kafka:
+        condition: service_healthy
+
+  # ---------- PostgreSQL ----------
+  postgres:
+    image: postgres:16-alpine
+    container_name: cvpm-postgres
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-cvpm}
+      POSTGRES_USER: ${POSTGRES_USER:-cvpm}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-cvpm_pw}
+    volumes:
+      - cvpm-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-cvpm}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # ---------- Python FastAPI risk-scoring service ----------
+  risk-service:
+    build: ./risk-service
+    container_name: cvpm-risk-service
+    ports:
+      - "8000:8000"
+    environment:
+      RISK_SERVICE_PORT: 8000
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  # ---------- Spring Boot telemetry service ----------
+  telemetry-service:
+    build: ./telemetry-service
+    container_name: cvpm-telemetry-service
+    ports:
+      - "8080:8080"
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-cvpm}
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-cvpm}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-cvpm_pw}
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      RISK_SERVICE_URL: http://risk-service:8000
+      JWT_SECRET: ${JWT_SECRET:-change-me-local-only-please-32-bytes-min}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      risk-service:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/actuator/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  # ---------- Vehicle telemetry simulator ----------
+  vehicle-simulator:
+    build: ./vehicle-simulator
+    container_name: cvpm-vehicle-simulator
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      SIMULATOR_INTERVAL_SECONDS: ${SIMULATOR_INTERVAL_SECONDS:-5}
+      SIMULATOR_VEHICLE_COUNT: ${SIMULATOR_VEHICLE_COUNT:-5}
+    depends_on:
+      kafka:
+        condition: service_healthy
+
+  # ---------- React + TypeScript dashboard ----------
+  dashboard:
+    build: ./dashboard
+    container_name: cvpm-dashboard
+    ports:
+      - "5173:80"
+    environment:
+      VITE_API_BASE_URL: http://localhost:8080
+    depends_on:
+      - telemetry-service
+
+volumes:
+  cvpm-postgres-data:
