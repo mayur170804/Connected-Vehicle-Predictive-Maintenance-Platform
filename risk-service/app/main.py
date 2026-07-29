@@ -1,5 +1,9 @@
 from fastapi import FastAPI
 
+from app.models import RiskScoreRequest, RiskScoreResponse
+from app.rules import calculate_risk
+
+
 app = FastAPI(
     title="CVPM Risk Scoring Service",
     description="Stateless rule-based risk scoring for vehicle telemetry.",
@@ -13,7 +17,6 @@ def health() -> dict:
     return {"status": "UP"}
 
 
-# NOTE: /score endpoint (Phase 3) will accept a TelemetryInput payload and
-# return {"riskLevel": "LOW|MEDIUM|HIGH", "reason": "..."} using the
-# pure-function rule engine in app/rules.py. Left out of this scaffold
-# intentionally so Phase 3 can be reviewed and tested on its own.
+@app.post("/score", response_model=RiskScoreResponse)
+def score(request: RiskScoreRequest) -> RiskScoreResponse:
+    return calculate_risk(request)
