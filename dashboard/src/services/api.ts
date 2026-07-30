@@ -30,6 +30,17 @@ export interface Telemetry {
   scoredAt: string | null;
 }
 
+export interface MaintenanceTicket {
+  id: string;
+  vehicleId: string;
+  telemetryId: string;
+  status: string;
+  riskLevel: string;
+  reason: string | null;
+  createdAt: string;
+  updatedAt?: string | null;
+}
+
 export async function login(
   username: string,
   password: string
@@ -61,6 +72,27 @@ export async function getVehicles(
   if (!response.ok) {
     throw new Error(
       `Failed to load vehicles (${response.status})`
+    );
+  }
+
+  return response.json();
+}
+
+export async function getMaintenanceTickets(
+  token: string
+): Promise<MaintenanceTicket[]> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/maintenance/tickets`,
+    {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    }
+  );
+
+  if (!response.ok) {
+    throw new Error(
+      `Failed to load maintenance tickets (${response.status})`
     );
   }
 
