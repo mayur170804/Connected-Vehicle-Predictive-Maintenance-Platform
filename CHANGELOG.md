@@ -1,295 +1,197 @@
 # Development Changelog
 
-## 29 July 2026
+## 30 July 2026
 
 ### Status
 
-Phases 0–3 completed.
+Phases 0–4 completed.
 
 The platform now supports vehicle management, JWT authentication,
 simulated telemetry generation, Kafka-based telemetry ingestion,
-PostgreSQL persistence, risk scoring, and an initial fleet dashboard.
+PostgreSQL persistence, automatic risk scoring, persisted risk results,
+and an initial fleet dashboard.
 
-Phase 4 is next: connecting persisted telemetry to the risk scoring service
-and creating maintenance tickets for high-risk events.
+Phase 4 completed the integration between the Spring Boot telemetry service
+and the FastAPI risk scoring service.
 
----
-
-## Phase 0 — Project Scaffolding
-
-- Created the initial multi-service project structure.
-- Added Spring Boot telemetry service.
-- Added FastAPI risk scoring service.
-- Added React + TypeScript dashboard.
-- Added Python vehicle simulator.
-- Added PostgreSQL.
-- Added Kafka and Kafka UI.
-- Added Dockerfiles for application services.
-- Added Docker Compose configuration.
-- Added service health checks.
-- Verified the local stack starts successfully.
+Telemetry events are now automatically scored after ingestion, and the
+resulting risk level is persisted with the telemetry record.
 
 ---
 
-## Phase 1 — Vehicle Management and Authentication
+## Phase 4 — Risk Scoring Integration
 
-### Vehicle Management
+### Telemetry and Risk Integration
 
-- Added Vehicle entity and persistence layer.
-- Added Vehicle CRUD service.
-- Added vehicle REST endpoints.
-- Added VIN duplicate validation.
-- Added request validation for:
-  - VIN
-  - Make
-  - Model
-  - Year
-- Added API error handling for:
-  - Resource not found
-  - Duplicate resources
-  - Validation failures
-
-### Authentication
-
-- Added JWT-based authentication.
-- Added login endpoint:
-
-  `POST /api/auth/login`
-
-- Added stateless Spring Security configuration.
-- Added JWT authentication filter.
-- Added BCrypt password hashing.
-- Added ADMIN and OPERATOR roles.
-- Added development user seeding.
-- Protected application API endpoints.
-- Kept authentication and health endpoints publicly accessible.
-
-### Database
-
-- Added PostgreSQL persistence.
-- Added Flyway database migrations.
-- Added application user tables.
-- Added vehicle tables.
-- Added telemetry schema.
-
----
-
-## Phase 2 — Telemetry Pipeline
-
-### Vehicle Simulator
-
-- Implemented the Python vehicle simulator.
-- Simulator authenticates with the telemetry service using JWT.
-- Simulator creates or reuses 5 simulated vehicles:
-
-  - `SIM-00001`
-  - `SIM-00002`
-  - `SIM-00003`
-  - `SIM-00004`
-  - `SIM-00005`
-
-- Simulator generates telemetry every 5 seconds.
-- Generated telemetry includes:
-  - Engine temperature
-  - Battery level
-  - Vibration
-  - Mileage
-  - Fault code
-  - Timestamp
-  - Vehicle ID
-
-### Anomaly Simulation
-
-- Added controlled anomaly generation.
-- Simulator occasionally generates:
-  - High engine temperature
-  - High vibration
-  - Low battery
-  - Critical fault conditions
-
-- Added critical fault codes:
-
-  - `P0217` — engine over-temperature
-  - `P0300` — random/multiple cylinder misfire
-
-### Kafka
-
-- Added `vehicle-telemetry` Kafka topic.
-- Simulator publishes telemetry directly to Kafka.
-- Spring Boot telemetry service consumes telemetry events.
-- Added Kafka producer configuration.
-- Added Kafka consumer configuration.
-- Added Kafka topic configuration.
-
-Telemetry pipeline:
-
-`Vehicle Simulator → Kafka → Telemetry Service → PostgreSQL`
-
-### Telemetry Persistence
-
-- Added telemetry entity and repository.
-- Added telemetry ingestion service.
-- Added Kafka telemetry consumer.
-- Added duplicate-event protection.
-- Telemetry events are persisted using vehicle ID and event timestamp.
-- Added telemetry history endpoint for vehicles.
-- Added REST telemetry publishing endpoint.
-
-### Verification
-
-- Verified simulator telemetry is continuously published.
-- Verified Spring Boot consumes Kafka events.
-- Verified telemetry records are stored in PostgreSQL.
-- Verified telemetry history can be retrieved through the REST API.
-- Verified critical fault events such as `P0300` are persisted.
-
----
-
-## Phase 3 — Risk Scoring
-
-### FastAPI Risk Service
-
-- Implemented the FastAPI risk scoring service.
-- Added health endpoint.
-- Added risk scoring endpoint:
+- Integrated the Spring Boot telemetry service with the FastAPI risk service.
+- Added automatic risk scoring during telemetry ingestion.
+- Telemetry events are first persisted before risk evaluation.
+- Added communication from the telemetry service to:
 
   `POST /score`
 
-- Added request and response models.
-- Added rule-based risk evaluation.
+- Telemetry values are sent to the risk service for evaluation.
+- Risk service returns:
+    - Risk level
+    - Risk reasons
 
-### Risk Levels
+Integrated processing flow:
 
-Implemented three risk levels:
+`Vehicle Simulator`
+→ `Kafka`
+→ `Telemetry Consumer`
+→ `Persist Telemetry`
+→ `Risk Service`
+→ `Store Risk Result`
 
-- `LOW` — normal telemetry
-- `MEDIUM` — warning conditions
-- `HIGH` — critical conditions
+### Risk Result Persistence
 
-### HIGH Risk Rules
+- Added risk information to persisted telemetry records.
+- Added `riskLevel` persistence.
+- Added `scoredAt` timestamp persistence.
+- Risk results are stored after successful scoring.
+- Verified LOW-risk results are persisted.
+- Verified HIGH-risk telemetry can be submitted manually for testing.
 
-Telemetry is classified as HIGH when one or more of the following occur:
+Telemetry records now contain:
 
-- Engine temperature > 105°C
-- Vibration > 8
-- Critical fault code detected:
-  - `P0217`
-  - `P0300`
+- Vehicle ID
+- Event timestamp
+- Engine temperature
+- Battery level
+- Vibration
+- Mileage
+- Fault code
+- Risk level
+- Risk scoring timestamp
 
-The response includes the reason or reasons that triggered the HIGH result.
+### Kafka Consumer Integration
 
-### MEDIUM Risk Rules
+- Updated the telemetry Kafka consumer to trigger risk scoring after
+  telemetry ingestion.
+- Added logging around the complete telemetry processing lifecycle.
+- Verified telemetry events are consumed from the `vehicle-telemetry` topic.
+- Verified persisted telemetry is passed to the risk service.
+- Verified successful risk responses are saved to PostgreSQL.
 
-Telemetry is classified as MEDIUM when no HIGH condition exists and one
-or more of the following occur:
+Example processing lifecycle:
 
-- Engine temperature > 90°C
-- Battery level < 25%
-- Mileage > 80,000 km
+`telemetry_persisted`
+→ `POST /score`
+→ `telemetry_risk_saved`
+→ `telemetry_scored`
 
-### LOW Risk
+### Duplicate and Concurrent Event Handling
 
-Telemetry is classified as LOW when no HIGH or MEDIUM conditions are present.
+- Maintained duplicate telemetry protection using:
+    - Vehicle ID
+    - Event timestamp
+- Added handling for concurrent duplicate inserts.
+- Database constraint violations caused by concurrent ingestion are resolved
+  by retrieving the already persisted telemetry record.
+- Prevented duplicate telemetry records from being created during ingestion.
 
-### Tests
+### Testing
 
-- Added risk rule unit tests.
-- Added FastAPI endpoint tests.
-- Verified LOW risk scenarios.
-- Verified MEDIUM risk scenarios.
-- Verified HIGH risk scenarios.
-- Verified critical fault-code handling.
-- Verified multiple risk reasons.
-- Verified request validation.
-- All 12 risk-service pytest tests are passing.
+- Updated telemetry ingestion unit tests for the integrated ingestion flow.
+- Verified new telemetry persistence.
+- Verified existing telemetry is not inserted again.
+- Verified telemetry from unknown vehicles is rejected.
+- Verified concurrent duplicate insertion handling.
+- Verified Maven tests and application build successfully.
 
----
+### End-to-End Verification
 
-## Dashboard Improvements
+Verified the complete processing pipeline using the vehicle simulator:
 
-### Authentication
+`Simulator`
+→ `Kafka`
+→ `Telemetry Service`
+→ `PostgreSQL`
+→ `Risk Service`
+→ `Risk Result Persistence`
 
-- Added dashboard login flow.
-- Added JWT handling.
-- Added sign-out functionality.
-- Dashboard communicates with protected Spring Boot APIs.
+Observed successful runtime events including:
 
-### Fleet Dashboard
+- `telemetry_persisted`
+- `telemetry_risk_saved`
+- `telemetry_scored`
+- Successful `POST /score` responses from the risk service.
 
-- Added Connected Vehicle dashboard layout.
-- Added Fleet Monitoring section.
-- Added Vehicle Health Overview.
-- Added total vehicle count.
-- Added telemetry-service health indicator.
-- Added system operational status.
-- Added fleet overview table.
+### Manual Telemetry Testing
 
-Fleet table displays:
+- Verified telemetry can also be manually published through Kafka UI.
+- Used an existing vehicle ID to inject custom telemetry.
+- Added the ability to test abnormal telemetry values independently of
+  simulator-generated events.
+- Verified manually produced Kafka events enter the same processing pipeline
+  as simulator events.
 
-- VIN
-- Vehicle
-- Year
-- Registration date
+This allows controlled testing of:
 
-### Simulator Integration
+- High engine temperature
+- Low battery
+- High vibration
+- Critical fault codes
+- LOW, MEDIUM, and HIGH risk scenarios
 
-- Dashboard successfully displays the 5 simulator-created vehicles.
-- Vehicle count updates from the backend API.
-- Fleet data is loaded from the telemetry service.
+### PostgreSQL Administration
 
----
+- Added pgAdmin to the Docker Compose environment.
+- Connected pgAdmin to the PostgreSQL container.
+- PostgreSQL data can now be inspected through a browser-based interface.
+- Telemetry records and persisted risk results can be inspected directly.
+- Existing PostgreSQL persistent volume remains in use.
 
-## Infrastructure and Fixes
+### Infrastructure
 
-### Docker
+The local Docker environment now includes:
 
-- Verified all services communicate through Docker Compose.
-- Added vehicle simulator container.
-- Connected simulator to Kafka and telemetry service.
-- Configured service startup dependencies.
-- Verified telemetry service health checks.
-- Verified risk service health checks.
-- Verified dashboard container.
+- PostgreSQL
+- pgAdmin
+- Kafka
+- Kafka UI
+- Spring Boot telemetry service
+- FastAPI risk service
+- Vehicle simulator
+- React dashboard
 
-### Kafka
-
-- Fixed Kafka KRaft cluster startup/configuration issues.
-- Verified Kafka topic communication.
-- Verified simulator → Kafka → telemetry-service flow.
-
-### CORS
-
-- Fixed frontend/backend CORS configuration.
-- Allowed the dashboard to access the telemetry service from:
-
-  `http://localhost:5173`
-
-- Fixed browser access to `/actuator/health`.
-- Verified dashboard health status after refresh.
-
-### Dashboard Build
-
-- Fixed dashboard Docker/CSS build issues.
-- Verified the React dashboard runs correctly through Docker.
+Verified all required application services start successfully and the core
+services report healthy status.
 
 ---
 
 ## Current Architecture
 
+The current end-to-end telemetry flow is:
+
 `Vehicle Simulator`
 ↓
 `Kafka — vehicle-telemetry`
 ↓
-`Spring Boot Telemetry Service`
+`Spring Boot Telemetry Consumer`
+↓
+`Telemetry Ingest Service`
 ↓
 `PostgreSQL`
+↓
+`FastAPI Risk Service — /score`
+↓
+`Risk Level + Reasons`
+↓
+`Persist Risk Result`
 
-Risk scoring currently runs as a separate FastAPI service:
+Telemetry records are therefore automatically processed from ingestion
+through risk evaluation without requiring a manual risk-service request.
 
-`Telemetry → Risk Service /score → LOW | MEDIUM | HIGH`
+The React dashboard communicates with the protected Spring Boot APIs using
+JWT authentication.
 
-The integration between the telemetry consumer and risk service will be
-implemented in Phase 4.
+Development infrastructure also provides:
+
+`Kafka UI → Kafka inspection`
+
+`pgAdmin → PostgreSQL inspection`
 
 ---
 
@@ -298,40 +200,56 @@ implemented in Phase 4.
 Working:
 
 - Docker-based local environment
-- PostgreSQL
+- PostgreSQL persistence
+- pgAdmin database administration
 - Kafka
 - Kafka UI
+- `vehicle-telemetry` Kafka topic
 - Spring Boot telemetry service
+- FastAPI risk service
 - JWT authentication
+- ADMIN and OPERATOR roles
 - Vehicle management
 - Vehicle simulator
 - Kafka telemetry publishing
 - Kafka telemetry consumption
 - Telemetry persistence
+- Duplicate telemetry protection
+- Concurrent duplicate handling
 - Telemetry history API
-- FastAPI risk scoring
-- Risk rules
-- Risk API tests
+- Automatic risk scoring
+- LOW / MEDIUM / HIGH risk classification
+- Risk reason generation
+- Risk level persistence
+- Risk scoring timestamp persistence
+- Manual Kafka telemetry testing
 - React dashboard
 - Fleet overview
 - Backend health monitoring
 - CORS configuration
+- Risk-service tests
+- Telemetry-service tests
+- End-to-end telemetry/risk pipeline
 
 Not yet implemented:
 
-- Automatic risk scoring during telemetry ingestion
-- Persisting risk level into telemetry records
-- Maintenance ticket creation
-- Maintenance alerts Kafka topic flow
-- Complete role-based endpoint enforcement
-- Telemetry history dashboard
+- Maintenance ticket persistence
+- Automatic maintenance ticket creation for HIGH-risk events
+- Idempotent maintenance ticket generation
+- `maintenance-alerts` Kafka topic
+- Maintenance alert publishing
+- Maintenance ticket REST APIs
 - Maintenance ticket dashboard
+- Telemetry history visualization
+- Risk status on the fleet dashboard
+- Complete role-based endpoint enforcement
 
 ---
 
-## Next — Phase 4
+## Next — Phase 5
 
-Phase 4 will connect the existing telemetry pipeline with the risk service.
+Phase 5 will build the predictive maintenance workflow on top of the
+completed telemetry and risk-scoring pipeline.
 
 Target flow:
 
@@ -344,13 +262,18 @@ Target flow:
 → `HIGH Risk`
 → `Create Maintenance Ticket`
 → `Publish Maintenance Alert`
+→ `Dashboard`
 
-Phase 4 goals:
+Phase 5 goals:
 
-- Call the FastAPI `/score` endpoint after telemetry ingestion.
-- Store `riskLevel` and `scoredAt` on telemetry records.
-- Add maintenance ticket persistence.
-- Automatically create tickets for HIGH-risk events.
-- Ensure ticket creation is idempotent.
+- Add maintenance ticket entity and persistence.
+- Automatically create maintenance tickets for HIGH-risk telemetry.
+- Ensure maintenance ticket creation is idempotent.
+- Add maintenance ticket lifecycle/status.
 - Add `maintenance-alerts` Kafka topic.
-- Publish alerts for newly created high-risk maintenance tickets.
+- Publish an alert when a new HIGH-risk maintenance ticket is created.
+- Add maintenance ticket REST APIs.
+- Display vehicle risk status on the fleet dashboard.
+- Add telemetry history visualization.
+- Add maintenance alerts/tickets to the dashboard.
+- Verify the complete predictive maintenance workflow end to end.
