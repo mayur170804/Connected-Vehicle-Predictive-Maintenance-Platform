@@ -510,3 +510,423 @@ input {
   font-family: monospace;
   font-weight: 600;
 }
+
+/* Risk badges */
+
+.riskBadge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+
+  min-width: 72px;
+  padding: 5px 10px;
+
+  border-radius: 999px;
+
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+}
+
+.riskLOW {
+  background: #ecfdf3;
+  color: #027a48;
+  border: 1px solid #abefc6;
+}
+
+.riskMEDIUM {
+  background: #fffaeb;
+  color: #b54708;
+  border: 1px solid #fedf89;
+}
+
+.riskHIGH {
+  background: #fef3f2;
+  color: #b42318;
+  border: 1px solid #fecdca;
+}
+
+/* High-risk vehicle */
+
+.vehicleTable tbody tr.highRiskRow {
+  background: #fff8f7;
+}
+
+.vehicleTable tbody tr.highRiskRow:hover {
+  background: #fff1ef;
+}
+
+/* Maintenance */
+
+.maintenancePanel {
+  margin-top: 28px;
+}
+
+.maintenancePanel .panelHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.ticketCount {
+  padding: 5px 10px;
+
+  background: #fef3f2;
+  color: #b42318;
+
+  border: 1px solid #fecdca;
+  border-radius: 999px;
+
+  font-size: 12px;
+  font-weight: 600;
+
+  white-space: nowrap;
+}
+
+.ticketStatus {
+  display: inline-flex;
+
+  padding: 5px 10px;
+
+  border-radius: 999px;
+
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.ticketOpen {
+  background: #fef3f2;
+  color: #b42318;
+}
+
+.ticketClosed {
+  background: #f2f4f7;
+  color: #475467;
+}
+
+.ticketReason {
+  max-width: 400px;
+
+  white-space: normal;
+  line-height: 1.45;
+}
+
+.ticketEmptyState {
+  padding: 40px 24px;
+
+  color: #667085;
+
+  text-align: center;
+  font-size: 13px;
+}
+
+.resolveButton {
+  padding: 7px 12px;
+
+  border: 1px solid #d0d5dd;
+  border-radius: 7px;
+
+  background: white;
+  color: #344054;
+
+  font-size: 12px;
+  font-weight: 600;
+
+  cursor: pointer;
+}
+
+.resolveButton:hover:not(:disabled) {
+  background: #f9fafb;
+  border-color: #98a2b3;
+}
+
+.resolveButton:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.ticketHistory {
+  border-top: 1px solid #e5e7eb;
+}
+
+.historyToggle {
+  width: 100%;
+  padding: 16px 24px;
+
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+
+  border: none;
+  background: #fafbfc;
+
+  color: #344054;
+  font-size: 14px;
+  font-weight: 600;
+
+  cursor: pointer;
+}
+
+.historyToggle:hover {
+  background: #f5f6f8;
+}
+
+.historyToggle > span:first-child {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.historyCount {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+
+  min-width: 24px;
+  height: 24px;
+  padding: 0 8px;
+
+  border-radius: 12px;
+
+  background: #eef2f6;
+  color: #475467;
+
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.historyTable {
+  border-top: 1px solid #e5e7eb;
+}
+
+.historyTable tbody tr {
+  background: #fafafa;
+}
+
+.historyTable tbody tr:hover {
+  background: #f7f7f7;
+}
+
+/* Clickable fleet rows */
+
+.clickableVehicleRow {
+  cursor: pointer;
+}
+
+.clickableVehicleRow td:first-child {
+  position: relative;
+}
+
+.clickableVehicleRow:hover td:first-child::before {
+  content: "";
+
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+
+  width: 3px;
+
+  background: #2563eb;
+}
+
+
+/* Vehicle details modal */
+
+.modalBackdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  padding: 28px;
+
+  background: rgba(15, 23, 42, 0.55);
+}
+
+.vehicleModal {
+  width: min(1100px, 100%);
+  max-height: calc(100vh - 56px);
+
+  display: flex;
+  flex-direction: column;
+
+  background: white;
+
+  border-radius: 14px;
+
+  box-shadow:
+    0 24px 48px rgba(16, 24, 40, 0.18);
+
+  overflow: hidden;
+}
+
+.vehicleModalHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+
+  padding: 22px 26px;
+
+  border-bottom: 1px solid #eaecf0;
+}
+
+.modalEyebrow {
+  margin: 0 0 5px;
+
+  color: #2563eb;
+
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 1.2px;
+}
+
+.vehicleModalHeader h2 {
+  margin: 0;
+
+  font-size: 22px;
+}
+
+.vehicleModalHeader > div > p:last-child {
+  margin: 5px 0 0;
+
+  color: #667085;
+
+  font-size: 13px;
+}
+
+.modalCloseButton {
+  width: 36px;
+  height: 36px;
+
+  border: 0;
+  border-radius: 8px;
+
+  background: transparent;
+  color: #667085;
+
+  cursor: pointer;
+
+  font-size: 25px;
+  line-height: 1;
+}
+
+.modalCloseButton:hover {
+  background: #f2f4f7;
+  color: #101828;
+}
+
+.vehicleModalContent {
+  padding: 26px;
+
+  overflow-y: auto;
+}
+
+.detailSectionHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+
+  gap: 16px;
+
+  margin-bottom: 16px;
+}
+
+.detailSectionHeader h3 {
+  margin: 0;
+
+  font-size: 16px;
+}
+
+.detailSectionHeader p {
+  margin: 4px 0 0;
+
+  color: #667085;
+
+  font-size: 12px;
+}
+
+.telemetryDetailGrid {
+  display: grid;
+
+  grid-template-columns:
+    repeat(3, minmax(0, 1fr));
+
+  gap: 12px;
+}
+
+.telemetryDetail {
+  padding: 16px;
+
+  background: #f9fafb;
+
+  border: 1px solid #eaecf0;
+  border-radius: 9px;
+}
+
+.telemetryDetail p {
+  margin: 0 0 7px;
+
+  color: #667085;
+
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.telemetryDetail strong {
+  color: #101828;
+
+  font-size: 15px;
+}
+
+.telemetryHistorySection {
+  margin-top: 28px;
+  padding-top: 24px;
+
+  border-top: 1px solid #eaecf0;
+}
+
+.historyTelemetryTable td,
+.historyTelemetryTable th {
+  white-space: nowrap;
+}
+
+.historyTelemetryTable .riskBadge {
+  min-width: 65px;
+}
+
+.modalEmptyState {
+  padding: 32px;
+
+  background: #f9fafb;
+  color: #667085;
+
+  border: 1px solid #eaecf0;
+  border-radius: 9px;
+
+  text-align: center;
+
+  font-size: 13px;
+}
+
+@media (max-width: 700px) {
+  .modalBackdrop {
+    padding: 12px;
+  }
+
+  .vehicleModal {
+    max-height: calc(100vh - 24px);
+  }
+
+  .vehicleModalContent {
+    padding: 18px;
+  }
+
+  .telemetryDetailGrid {
+    grid-template-columns: 1fr;
+  }
+}
