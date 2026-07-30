@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import Header from "./components/Header";
 import Login from "./components/Login";
@@ -19,53 +19,159 @@ import {
 import "./styles/app.css";
 
 const API_BASE_URL =
-  import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8080";
+  import.meta.env.VITE_API_BASE_URL ??
+  "http://localhost:8080";
 
 export default function App() {
-  const [status, setStatus] = useState("checking...");
+  const [status, setStatus] =
+    useState("checking...");
 
-  const [token, setToken] = useState<string | null>(
-    sessionStorage.getItem("cvpm_token")
-  );
+  const [token, setToken] =
+    useState<string | null>(
+      sessionStorage.getItem("cvpm_token")
+    );
 
-  const [vehicles, setVehicles] = useState<Vehicle[]>([]);
-  const [vehiclesLoading, setVehiclesLoading] = useState(false);
-  const [vehiclesError, setVehiclesError] = useState("");
+  const [vehicles, setVehicles] =
+    useState<Vehicle[]>([]);
 
-  const [telemetryByVehicle, setTelemetryByVehicle] =
-    useState<Record<string, Telemetry | null>>({});
-
-  const [maintenanceTickets, setMaintenanceTickets] =
-    useState<MaintenanceTicket[]>([]);
-
-  const [resolvingTicketId, setResolvingTicketId] =
-    useState<string | null>(null);
-
-  const [showTicketHistory, setShowTicketHistory] =
+  const [vehiclesLoading, setVehiclesLoading] =
     useState(false);
 
-  const [selectedVehicle, setSelectedVehicle] =
-    useState<Vehicle | null>(null);
+  const [vehiclesError, setVehiclesError] =
+    useState("");
+
+  const [
+    telemetryByVehicle,
+    setTelemetryByVehicle,
+  ] = useState<
+    Record<string, Telemetry | null>
+  >({});
+
+  const [
+    maintenanceTickets,
+    setMaintenanceTickets,
+  ] = useState<MaintenanceTicket[]>([]);
+
+  const [
+    resolvingTicketId,
+    setResolvingTicketId,
+  ] = useState<string | null>(null);
+
+  const [
+    showTicketHistory,
+    setShowTicketHistory,
+  ] = useState(false);
+
+  const [
+    selectedVehicle,
+    setSelectedVehicle,
+  ] = useState<Vehicle | null>(null);
+
+  const [searchTerm, setSearchTerm] =
+    useState("");
+
+  const [riskFilter, setRiskFilter] =
+    useState<
+      "ALL" | "LOW" | "MEDIUM" | "HIGH"
+    >("ALL");
+
+  /*
+   * New maintenance alert toast
+   */
+  const [
+    maintenanceAlert,
+    setMaintenanceAlert,
+  ] = useState<MaintenanceTicket | null>(
+    null
+  );
+
+  /*
+   * null = ticket list has not been
+   * initialized yet.
+   *
+   * Once loaded, this stores all ticket
+   * IDs seen during the previous refresh.
+   */
+  const knownTicketIdsRef =
+    useRef<Set<string> | null>(null);
+
+  /*
+   * Authentication expiry listener
+   */
+  useEffect(() => {
+    function handleAuthExpired() {
+      setToken(null);
+      setVehicles([]);
+      setTelemetryByVehicle({});
+      setMaintenanceTickets([]);
+      setSelectedVehicle(null);
+      setVehiclesError("");
+      setResolvingTicketId(null);
+      setShowTicketHistory(false);
+      setSearchTerm("");
+      setRiskFilter("ALL");
+
+      setMaintenanceAlert(null);
+      knownTicketIdsRef.current = null;
+    }
+
+    window.addEventListener(
+      "cvpm:auth-expired",
+      handleAuthExpired
+    );
+
+    return () => {
+      window.removeEventListener(
+        "cvpm:auth-expired",
+        handleAuthExpired
+      );
+    };
+  }, []);
 
   /*
    * Backend health check
    */
   useEffect(() => {
-    fetch(`${API_BASE_URL}/actuator/health`)
+    fetch(
+      `${API_BASE_URL}/actuator/health`
+    )
       .then((res) => {
         if (!res.ok) {
-          throw new Error("Health check failed");
+          throw new Error(
+            "Health check failed"
+          );
         }
 
         return res.json();
       })
       .then((data) => {
-        setStatus(data.status ?? "unknown");
+        setStatus(
+          data.status ?? "unknown"
+        );
       })
       .catch(() => {
         setStatus("unreachable");
       });
   }, []);
+
+  /*
+   * Automatically hide maintenance
+   * alert after 5 seconds.
+   */
+  useEffect(() => {
+    if (!maintenanceAlert) {
+      return;
+    }
+
+    const timeoutId =
+      window.setTimeout(() => {
+        setMaintenanceAlert(null);
+      }, 5000);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [maintenanceAlert]);
 
   /*
    * Initial dashboard load
@@ -85,22 +191,49 @@ export default function App() {
         /*
          * Load vehicles
          */
-        const vehicleData = await getVehicles(authToken);
+        const vehicleData =
+          await getVehicles(authToken);
 
         setVehicles(vehicleData);
 
         /*
-         * Load maintenance tickets independently
+         * Load maintenance tickets
          */
         try {
           const ticketData =
-            await getMaintenanceTickets(authToken);
+            await getMaintenanceTickets(
+              authToken
+            );
 
-          setMaintenanceTickets(ticketData);
+          setMaintenanceTickets(
+            ticketData
+          );
+
+          /*
+           * Initial tickets are considered
+           * already known.
+           *
+           * We do NOT show toast notifications
+           * for tickets that existed before
+           * the dashboard loaded.
+           */
+          knownTicketIdsRef.current =
+            new Set(
+              ticketData.map(
+                (ticket) => ticket.id
+              )
+            );
 
           console.log(
             "Initial maintenance tickets:",
             ticketData
+          );
+
+          console.log(
+            "Known ticket IDs initialized:",
+            Array.from(
+              knownTicketIdsRef.current
+            )
           );
         } catch (error) {
           console.error(
@@ -109,41 +242,53 @@ export default function App() {
           );
 
           setMaintenanceTickets([]);
+
+          /*
+           * Keep null so the next successful
+           * fetch becomes our initial snapshot.
+           */
+          knownTicketIdsRef.current = null;
         }
 
         /*
-         * Load latest telemetry for every vehicle
+         * Load latest telemetry
+         * for every vehicle
          */
-        const telemetryEntries = await Promise.all(
-          vehicleData.map(async (vehicle) => {
-            try {
-              const telemetry =
-                await getLatestTelemetry(
-                  vehicle.id,
-                  authToken
-                );
+        const telemetryEntries =
+          await Promise.all(
+            vehicleData.map(
+              async (vehicle) => {
+                try {
+                  const telemetry =
+                    await getLatestTelemetry(
+                      vehicle.id,
+                      authToken
+                    );
 
-              return [
-                vehicle.id,
-                telemetry,
-              ] as const;
-            } catch (error) {
-              console.error(
-                "Initial telemetry load failed:",
-                vehicle.id,
-                error
-              );
+                  return [
+                    vehicle.id,
+                    telemetry,
+                  ] as const;
+                } catch (error) {
+                  console.error(
+                    "Initial telemetry load failed:",
+                    vehicle.id,
+                    error
+                  );
 
-              return [
-                vehicle.id,
-                null,
-              ] as const;
-            }
-          })
-        );
+                  return [
+                    vehicle.id,
+                    null,
+                  ] as const;
+                }
+              }
+            )
+          );
 
         setTelemetryByVehicle(
-          Object.fromEntries(telemetryEntries)
+          Object.fromEntries(
+            telemetryEntries
+          )
         );
       } catch (error) {
         console.error(
@@ -174,7 +319,10 @@ export default function App() {
    * every 5 seconds
    */
   useEffect(() => {
-    if (!token || vehicles.length === 0) {
+    if (
+      !token ||
+      vehicles.length === 0
+    ) {
       return;
     }
 
@@ -182,57 +330,150 @@ export default function App() {
 
     async function refreshDashboard() {
       /*
-       * Refresh latest telemetry
+       * Refresh telemetry for ALL
+       * vehicles regardless of filters.
        */
-      const telemetryEntries = await Promise.all(
-        vehicles.map(async (vehicle) => {
-          try {
-            const telemetry =
-              await getLatestTelemetry(
-                vehicle.id,
-                authToken
-              );
+      const telemetryEntries =
+        await Promise.all(
+          vehicles.map(
+            async (vehicle) => {
+              try {
+                const telemetry =
+                  await getLatestTelemetry(
+                    vehicle.id,
+                    authToken
+                  );
 
-            console.log(
-              "LATEST",
-              vehicle.vin,
-              telemetry?.timestamp,
-              telemetry?.engineTemperature,
-              telemetry?.riskLevel
-            );
+                console.log(
+                  "LATEST",
+                  vehicle.vin,
+                  telemetry?.timestamp,
+                  telemetry
+                    ?.engineTemperature,
+                  telemetry?.riskLevel
+                );
 
-            return [
-              vehicle.id,
-              telemetry,
-            ] as const;
-          } catch (error) {
-            console.error(
-              "Telemetry refresh failed:",
-              vehicle.id,
-              error
-            );
+                return [
+                  vehicle.id,
+                  telemetry,
+                ] as const;
+              } catch (error) {
+                console.error(
+                  "Telemetry refresh failed:",
+                  vehicle.id,
+                  error
+                );
 
-            return [
-              vehicle.id,
-              null,
-            ] as const;
-          }
-        })
-      );
+                return [
+                  vehicle.id,
+                  null,
+                ] as const;
+              }
+            }
+          )
+        );
 
       const nextTelemetry =
-        Object.fromEntries(telemetryEntries);
+        Object.fromEntries(
+          telemetryEntries
+        );
 
-      setTelemetryByVehicle(nextTelemetry);
+      setTelemetryByVehicle(
+        nextTelemetry
+      );
 
       /*
        * Refresh maintenance tickets
        */
       try {
         const ticketData =
-          await getMaintenanceTickets(authToken);
+          await getMaintenanceTickets(
+            authToken
+          );
 
-        setMaintenanceTickets(ticketData);
+        console.log(
+          "Maintenance ticket refresh:",
+          ticketData
+        );
+
+        const previousIds =
+          knownTicketIdsRef.current;
+
+        /*
+         * If we have already loaded a previous
+         * snapshot, detect newly-created OPEN
+         * tickets.
+         */
+        if (previousIds !== null) {
+          const newOpenTickets =
+            ticketData.filter(
+              (ticket) =>
+                ticket.status
+                  ?.toUpperCase() ===
+                  "OPEN" &&
+                !previousIds.has(
+                  ticket.id
+                )
+            );
+
+          console.log(
+            "New open tickets:",
+            newOpenTickets
+          );
+
+          if (
+            newOpenTickets.length > 0
+          ) {
+            /*
+             * If multiple tickets appeared
+             * between polls, show the newest.
+             */
+            const newestTicket =
+              [...newOpenTickets].sort(
+                (a, b) =>
+                  new Date(
+                    b.createdAt
+                  ).getTime() -
+                  new Date(
+                    a.createdAt
+                  ).getTime()
+              )[0];
+
+            console.log(
+              "Showing maintenance toast:",
+              newestTicket
+            );
+
+            setMaintenanceAlert(
+              newestTicket
+            );
+          }
+        } else {
+          /*
+           * First successful ticket response.
+           *
+           * Establish the initial snapshot
+           * without showing notifications.
+           */
+          console.log(
+            "Initializing ticket snapshot."
+          );
+        }
+
+        /*
+         * Store current IDs for comparison
+         * during the next poll.
+         */
+        knownTicketIdsRef.current =
+          new Set(
+            ticketData.map(
+              (ticket) => ticket.id
+            )
+          );
+
+        setMaintenanceTickets(
+          ticketData
+        );
       } catch (error) {
         console.error(
           "Maintenance ticket refresh failed:",
@@ -249,13 +490,16 @@ export default function App() {
     /*
      * Refresh every 5 seconds
      */
-    const intervalId = window.setInterval(
-      refreshDashboard,
-      5000
-    );
+    const intervalId =
+      window.setInterval(
+        refreshDashboard,
+        5000
+      );
 
     return () => {
-      window.clearInterval(intervalId);
+      window.clearInterval(
+        intervalId
+      );
     };
   }, [token, vehicles]);
 
@@ -270,7 +514,9 @@ export default function App() {
     }
 
     try {
-      setResolvingTicketId(ticketId);
+      setResolvingTicketId(
+        ticketId
+      );
 
       await resolveMaintenanceTicket(
         ticketId,
@@ -278,12 +524,28 @@ export default function App() {
       );
 
       /*
-       * Reload tickets after resolve
+       * Reload tickets after resolving.
        */
       const ticketData =
-        await getMaintenanceTickets(token);
+        await getMaintenanceTickets(
+          token
+        );
 
-      setMaintenanceTickets(ticketData);
+      /*
+       * Synchronize known ticket IDs so
+       * resolving doesn't interfere with
+       * new-ticket detection.
+       */
+      knownTicketIdsRef.current =
+        new Set(
+          ticketData.map(
+            (ticket) => ticket.id
+          )
+        );
+
+      setMaintenanceTickets(
+        ticketData
+      );
     } catch (error) {
       console.error(
         "Failed to resolve maintenance ticket:",
@@ -311,6 +573,11 @@ export default function App() {
       result.token
     );
 
+    /*
+     * Fresh ticket snapshot after login.
+     */
+    knownTicketIdsRef.current = null;
+
     setToken(result.token);
   }
 
@@ -318,13 +585,23 @@ export default function App() {
    * Logout
    */
   function handleLogout() {
-    sessionStorage.removeItem("cvpm_token");
+    sessionStorage.removeItem(
+      "cvpm_token"
+    );
 
     setToken(null);
     setVehicles([]);
     setTelemetryByVehicle({});
     setMaintenanceTickets([]);
     setSelectedVehicle(null);
+    setVehiclesError("");
+    setResolvingTicketId(null);
+    setShowTicketHistory(false);
+    setSearchTerm("");
+    setRiskFilter("ALL");
+
+    setMaintenanceAlert(null);
+    knownTicketIdsRef.current = null;
   }
 
   /*
@@ -332,7 +609,9 @@ export default function App() {
    */
   if (!token) {
     return (
-      <Login onLogin={handleLogin} />
+      <Login
+        onLogin={handleLogin}
+      />
     );
   }
 
@@ -344,13 +623,15 @@ export default function App() {
       telemetryByVehicle
     ).filter(
       (telemetry) =>
-        telemetry?.riskLevel === "HIGH"
+        telemetry?.riskLevel ===
+        "HIGH"
     ).length;
 
   const openTicketCount =
     maintenanceTickets.filter(
       (ticket) =>
-        ticket.status?.toUpperCase() ===
+        ticket.status
+          ?.toUpperCase() ===
         "OPEN"
     ).length;
 
@@ -360,35 +641,78 @@ export default function App() {
   const openTickets =
     maintenanceTickets.filter(
       (ticket) =>
-        ticket.status?.toUpperCase() ===
+        ticket.status
+          ?.toUpperCase() ===
         "OPEN"
     );
 
   /*
    * Latest 10 resolved tickets
-   *
-   * Prefer updatedAt because that represents
-   * when the ticket was resolved.
    */
   const resolvedTickets =
     maintenanceTickets
       .filter(
         (ticket) =>
-          ticket.status?.toUpperCase() ===
+          ticket.status
+            ?.toUpperCase() ===
           "RESOLVED"
       )
       .sort((a, b) => {
-        const bTime = new Date(
-          b.updatedAt ?? b.createdAt
-        ).getTime();
+        const bTime =
+          new Date(
+            b.updatedAt ??
+              b.createdAt
+          ).getTime();
 
-        const aTime = new Date(
-          a.updatedAt ?? a.createdAt
-        ).getTime();
+        const aTime =
+          new Date(
+            a.updatedAt ??
+              a.createdAt
+          ).getTime();
 
         return bTime - aTime;
       })
       .slice(0, 10);
+
+  /*
+   * Fleet search + risk filtering
+   */
+  const filteredVehicles =
+    vehicles.filter((vehicle) => {
+      const telemetry =
+        telemetryByVehicle[
+          vehicle.id
+        ];
+
+      const search =
+        searchTerm
+          .trim()
+          .toLowerCase();
+
+      const matchesSearch =
+        !search ||
+        vehicle.vin
+          .toLowerCase()
+          .includes(search) ||
+        (vehicle.make
+          ?.toLowerCase()
+          .includes(search) ??
+          false) ||
+        (vehicle.model
+          ?.toLowerCase()
+          .includes(search) ??
+          false);
+
+      const matchesRisk =
+        riskFilter === "ALL" ||
+        telemetry?.riskLevel ===
+          riskFilter;
+
+      return (
+        matchesSearch &&
+        matchesRisk
+      );
+    });
 
   return (
     <div className="app">
@@ -411,9 +735,9 @@ export default function App() {
 
             <p>
               Monitor vehicle telemetry,
-              maintenance risk and service
-              requirements from one
-              dashboard.
+              maintenance risk and
+              service requirements from
+              one dashboard.
             </p>
           </div>
 
@@ -472,7 +796,7 @@ export default function App() {
         {/* Fleet overview */}
 
         <section className="panel">
-          <div className="panelHeader">
+          <div className="panelHeader fleetPanelHeader">
             <div>
               <h3>
                 Fleet Overview
@@ -482,6 +806,51 @@ export default function App() {
                 Registered vehicles in
                 the connected fleet.
               </p>
+            </div>
+
+            <div className="fleetControls">
+              <input
+                className="fleetSearch"
+                type="search"
+                placeholder="Search VIN or vehicle..."
+                value={searchTerm}
+                onChange={(event) =>
+                  setSearchTerm(
+                    event.target.value
+                  )
+                }
+              />
+
+              <select
+                className="riskFilter"
+                value={riskFilter}
+                onChange={(event) =>
+                  setRiskFilter(
+                    event.target
+                      .value as
+                      | "ALL"
+                      | "LOW"
+                      | "MEDIUM"
+                      | "HIGH"
+                  )
+                }
+              >
+                <option value="ALL">
+                  All risks
+                </option>
+
+                <option value="LOW">
+                  Low
+                </option>
+
+                <option value="MEDIUM">
+                  Medium
+                </option>
+
+                <option value="HIGH">
+                  High
+                </option>
+              </select>
             </div>
           </div>
 
@@ -531,28 +900,58 @@ export default function App() {
               </div>
             )}
 
+          {/* No filter results */}
+
+          {!vehiclesLoading &&
+            !vehiclesError &&
+            vehicles.length > 0 &&
+            filteredVehicles.length ===
+              0 && (
+              <div className="emptyState">
+                <h3>
+                  No matching vehicles
+                </h3>
+
+                <p>
+                  Try changing your
+                  search or risk filter.
+                </p>
+              </div>
+            )}
+
           {/* Fleet table */}
 
           {!vehiclesLoading &&
             !vehiclesError &&
-            vehicles.length > 0 && (
+            filteredVehicles.length >
+              0 && (
               <div className="tableWrapper">
                 <table className="vehicleTable">
                   <thead>
                     <tr>
                       <th>VIN</th>
-                      <th>Vehicle</th>
+                      <th>
+                        Vehicle
+                      </th>
                       <th>Year</th>
                       <th>Risk</th>
-                      <th>Temperature</th>
-                      <th>Battery</th>
-                      <th>Vibration</th>
-                      <th>Last Update</th>
+                      <th>
+                        Temperature
+                      </th>
+                      <th>
+                        Battery
+                      </th>
+                      <th>
+                        Vibration
+                      </th>
+                      <th>
+                        Last Update
+                      </th>
                     </tr>
                   </thead>
 
                   <tbody>
-                    {vehicles.map(
+                    {filteredVehicles.map(
                       (vehicle) => {
                         const telemetry =
                           telemetryByVehicle[
@@ -561,16 +960,25 @@ export default function App() {
 
                         return (
                           <tr
-                            key={vehicle.id}
-                            onClick={() => setSelectedVehicle(vehicle)}
+                            key={
+                              vehicle.id
+                            }
+                            onClick={() =>
+                              setSelectedVehicle(
+                                vehicle
+                              )
+                            }
                             className={`clickableVehicleRow ${
-                              telemetry?.riskLevel === "HIGH"
+                              telemetry?.riskLevel ===
+                              "HIGH"
                                 ? "highRiskRow"
                                 : ""
                             }`}
                           >
                             <td className="vin">
-                              {vehicle.vin}
+                              {
+                                vehicle.vin
+                              }
                             </td>
 
                             <td>
@@ -650,9 +1058,9 @@ export default function App() {
               </h3>
 
               <p>
-                Active maintenance alerts
-                generated from vehicle risk
-                events.
+                Active maintenance
+                alerts generated from
+                vehicle risk events.
               </p>
             </div>
 
@@ -665,19 +1073,30 @@ export default function App() {
 
           {openTickets.length === 0 ? (
             <div className="ticketEmptyState">
-              No open maintenance tickets.
+              No open maintenance
+              tickets.
             </div>
           ) : (
             <div className="tableWrapper">
               <table className="vehicleTable">
                 <thead>
                   <tr>
-                    <th>Vehicle</th>
+                    <th>
+                      Vehicle
+                    </th>
                     <th>Risk</th>
-                    <th>Reason</th>
-                    <th>Status</th>
-                    <th>Created</th>
-                    <th>Action</th>
+                    <th>
+                      Reason
+                    </th>
+                    <th>
+                      Status
+                    </th>
+                    <th>
+                      Created
+                    </th>
+                    <th>
+                      Action
+                    </th>
                   </tr>
                 </thead>
 
@@ -697,7 +1116,9 @@ export default function App() {
                         "UNKNOWN";
 
                       return (
-                        <tr key={ticket.id}>
+                        <tr
+                          key={ticket.id}
+                        >
                           <td className="vin">
                             {vehicle?.vin ??
                               ticket.vehicleId}
@@ -707,7 +1128,9 @@ export default function App() {
                             <span
                               className={`riskBadge risk${ticketRisk}`}
                             >
-                              {ticketRisk}
+                              {
+                                ticketRisk
+                              }
                             </span>
                           </td>
 
@@ -731,11 +1154,23 @@ export default function App() {
                           <td>
                             <button
                               className="resolveButton"
-                              onClick={() =>
-                                handleResolveTicket(
-                                  ticket.id
-                                )
-                              }
+                              onClick={() => {
+                                const confirmed =
+                                  window.confirm(
+                                    `Are you sure you want to resolve this maintenance ticket for ${
+                                      vehicle?.vin ??
+                                      ticket.vehicleId
+                                    }?`
+                                  );
+
+                                if (
+                                  confirmed
+                                ) {
+                                  handleResolveTicket(
+                                    ticket.id
+                                  );
+                                }
+                              }}
                               disabled={
                                 resolvingTicketId ===
                                 ticket.id
@@ -758,20 +1193,24 @@ export default function App() {
 
           {/* Ticket history */}
 
-          {resolvedTickets.length > 0 && (
+          {resolvedTickets.length >
+            0 && (
             <div className="ticketHistory">
               <button
                 className="historyToggle"
                 onClick={() =>
                   setShowTicketHistory(
-                    (current) => !current
+                    (current) =>
+                      !current
                   )
                 }
               >
                 <span>
                   Ticket History{" "}
                   <span className="historyCount">
-                    {resolvedTickets.length}
+                    {
+                      resolvedTickets.length
+                    }
                   </span>
                 </span>
 
@@ -787,11 +1226,25 @@ export default function App() {
                   <table className="vehicleTable">
                     <thead>
                       <tr>
-                        <th>Vehicle</th>
-                        <th>Risk</th>
-                        <th>Reason</th>
-                        <th>Status</th>
-                        <th>Resolved</th>
+                        <th>
+                          Vehicle
+                        </th>
+
+                        <th>
+                          Risk
+                        </th>
+
+                        <th>
+                          Reason
+                        </th>
+
+                        <th>
+                          Status
+                        </th>
+
+                        <th>
+                          Resolved
+                        </th>
                       </tr>
                     </thead>
 
@@ -800,7 +1253,9 @@ export default function App() {
                         (ticket) => {
                           const vehicle =
                             vehicles.find(
-                              (vehicle) =>
+                              (
+                                vehicle
+                              ) =>
                                 vehicle.id ===
                                 ticket.vehicleId
                             );
@@ -811,7 +1266,11 @@ export default function App() {
                             "UNKNOWN";
 
                           return (
-                            <tr key={ticket.id}>
+                            <tr
+                              key={
+                                ticket.id
+                              }
+                            >
                               <td className="vin">
                                 {vehicle?.vin ??
                                   ticket.vehicleId}
@@ -821,7 +1280,9 @@ export default function App() {
                                 <span
                                   className={`riskBadge risk${ticketRisk}`}
                                 >
-                                  {ticketRisk}
+                                  {
+                                    ticketRisk
+                                  }
                                 </span>
                               </td>
 
@@ -855,15 +1316,78 @@ export default function App() {
         </section>
       </main>
 
+      {/* New maintenance ticket toast */}
+
+      {maintenanceAlert && (
+        <div className="maintenanceAlertToast">
+          <div className="maintenanceAlertIcon">
+            !
+          </div>
+
+          <div className="maintenanceAlertContent">
+            <div className="maintenanceAlertHeader">
+              <strong>
+                New maintenance alert
+              </strong>
+
+              <button
+                className="maintenanceAlertClose"
+                onClick={() =>
+                  setMaintenanceAlert(
+                    null
+                  )
+                }
+                aria-label="Dismiss alert"
+              >
+                ×
+              </button>
+            </div>
+
+            <p className="maintenanceAlertVehicle">
+              {vehicles.find(
+                (vehicle) =>
+                  vehicle.id ===
+                  maintenanceAlert.vehicleId
+              )?.vin ??
+                maintenanceAlert.vehicleId}
+            </p>
+
+            <div className="maintenanceAlertDetails">
+              {maintenanceAlert.riskLevel && (
+                <span
+                  className={`riskBadge risk${maintenanceAlert.riskLevel.toUpperCase()}`}
+                >
+                  {maintenanceAlert.riskLevel.toUpperCase()}
+                </span>
+              )}
+
+              <span>
+                {maintenanceAlert.reason ||
+                  "Maintenance attention required"}
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Vehicle details */}
+
       {selectedVehicle && (
         <VehicleDetailsModal
-          vehicle={selectedVehicle}
+          vehicle={
+            selectedVehicle
+          }
           latestTelemetry={
-            telemetryByVehicle[selectedVehicle.id] ??
-            null
+            telemetryByVehicle[
+              selectedVehicle.id
+            ] ?? null
           }
           token={token}
-          onClose={() => setSelectedVehicle(null)}
+          onClose={() =>
+            setSelectedVehicle(
+              null
+            )
+          }
         />
       )}
     </div>
