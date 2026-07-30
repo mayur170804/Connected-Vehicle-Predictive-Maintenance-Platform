@@ -1,10 +1,12 @@
 import { useEffect, useState } from "react";
+import TelemetryCharts from "./TelemetryCharts";
 
 import {
   Vehicle,
   Telemetry,
   getTelemetryHistory,
 } from "../services/api";
+
 
 interface Props {
   vehicle: Vehicle;
@@ -162,6 +164,10 @@ export default function VehicleDetailsModal({
               </div>
             )}
           </section>
+
+          {!loading && !error && history.length > 0 && (
+            <TelemetryCharts history={history} />
+          )}
 
           <section className="telemetryHistorySection">
             <div className="detailSectionHeader">

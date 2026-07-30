@@ -47,6 +47,31 @@ export default function App() {
   const [selectedVehicle, setSelectedVehicle] =
     useState<Vehicle | null>(null);
 
+    useEffect(() => {
+      function handleAuthExpired() {
+        setToken(null);
+        setVehicles([]);
+        setTelemetryByVehicle({});
+        setMaintenanceTickets([]);
+        setSelectedVehicle(null);
+        setVehiclesError("");
+        setResolvingTicketId(null);
+        setShowTicketHistory(false);
+      }
+
+      window.addEventListener(
+        "cvpm:auth-expired",
+        handleAuthExpired
+      );
+
+      return () => {
+        window.removeEventListener(
+          "cvpm:auth-expired",
+          handleAuthExpired
+        );
+      };
+    }, []);
+
   /*
    * Backend health check
    */
@@ -325,6 +350,9 @@ export default function App() {
     setTelemetryByVehicle({});
     setMaintenanceTickets([]);
     setSelectedVehicle(null);
+    setVehiclesError("");
+    setResolvingTicketId(null);
+    setShowTicketHistory(false);
   }
 
   /*
@@ -731,18 +759,22 @@ export default function App() {
                           <td>
                             <button
                               className="resolveButton"
-                              onClick={() =>
-                                handleResolveTicket(
-                                  ticket.id
-                                )
-                              }
+                              onClick={() => {
+                                const confirmed = window.confirm(
+                                  `Are you sure you want to resolve this maintenance ticket for ${
+                                    vehicle?.vin ?? ticket.vehicleId
+                                  }?`
+                                );
+
+                                if (confirmed) {
+                                  handleResolveTicket(ticket.id);
+                                }
+                              }}
                               disabled={
-                                resolvingTicketId ===
-                                ticket.id
+                                resolvingTicketId === ticket.id
                               }
                             >
-                              {resolvingTicketId ===
-                              ticket.id
+                              {resolvingTicketId === ticket.id
                                 ? "Resolving..."
                                 : "Resolve"}
                             </button>

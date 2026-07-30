@@ -930,3 +930,46 @@ input {
     grid-template-columns: 1fr;
   }
 }
+
+/* Telemetry charts */
+
+.telemetryChartsSection {
+  margin-top: 28px;
+}
+
+.telemetryChartsGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+  margin-top: 16px;
+}
+
+.telemetryChartCard {
+  min-width: 0;
+  padding: 16px;
+
+  background: #f9fafb;
+
+  border: 1px solid #eaecf0;
+  border-radius: 10px;
+}
+
+.telemetryChartCard h4 {
+  margin: 0 0 14px;
+
+  color: #344054;
+
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.telemetryChart {
+  width: 100%;
+  height: 220px;
+}
+
+@media (max-width: 1000px) {
+  .telemetryChartsGrid {
+    grid-template-columns: 1fr;
+  }
+}

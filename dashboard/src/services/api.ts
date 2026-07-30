@@ -1,6 +1,24 @@
 const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8080";
 
+/*
+ * Handle expired / invalid authentication
+ */
+
+function handleAuthError(response: Response) {
+  if (response.status === 401 || response.status === 403) {
+    sessionStorage.removeItem("cvpm_token");
+
+    window.dispatchEvent(
+      new Event("cvpm:auth-expired")
+    );
+  }
+}
+
+/*
+ * Types
+ */
+
 export interface LoginResponse {
   token: string;
   username: string;
@@ -89,6 +107,8 @@ export async function getVehicles(
   );
 
   if (!response.ok) {
+    handleAuthError(response);
+
     throw new Error(
       `Failed to load vehicles (${response.status})`
     );
@@ -114,6 +134,8 @@ export async function getMaintenanceTickets(
   );
 
   if (!response.ok) {
+    handleAuthError(response);
+
     throw new Error(
       `Failed to load maintenance tickets (${response.status})`
     );
@@ -137,6 +159,8 @@ export async function resolveMaintenanceTicket(
   );
 
   if (!response.ok) {
+    handleAuthError(response);
+
     throw new Error(
       `Failed to resolve maintenance ticket (${response.status})`
     );
@@ -167,6 +191,8 @@ export async function getLatestTelemetry(
   }
 
   if (!response.ok) {
+    handleAuthError(response);
+
     throw new Error(
       `Failed to load latest telemetry (${response.status})`
     );
@@ -193,6 +219,8 @@ export async function getTelemetryHistory(
   );
 
   if (!response.ok) {
+    handleAuthError(response);
+
     throw new Error(
       `Failed to load telemetry history (${response.status})`
     );
