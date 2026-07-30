@@ -17,6 +17,19 @@ export interface Vehicle {
   createdAt: string;
 }
 
+export interface Telemetry {
+  id: string;
+  vehicleId: string;
+  timestamp: string;
+  engineTemperature: number;
+  batteryLevel: number;
+  vibration: number;
+  mileage: number;
+  faultCode: string | null;
+  riskLevel: "LOW" | "MEDIUM" | "HIGH" | null;
+  scoredAt: string | null;
+}
+
 export async function login(
   username: string,
   password: string
@@ -36,7 +49,9 @@ export async function login(
   return response.json();
 }
 
-export async function getVehicles(token: string): Promise<Vehicle[]> {
+export async function getVehicles(
+  token: string
+): Promise<Vehicle[]> {
   const response = await fetch(`${API_BASE_URL}/api/vehicles`, {
     headers: {
       Authorization: `Bearer ${token}`,
@@ -44,7 +59,35 @@ export async function getVehicles(token: string): Promise<Vehicle[]> {
   });
 
   if (!response.ok) {
-    throw new Error(`Failed to load vehicles (${response.status})`);
+    throw new Error(
+      `Failed to load vehicles (${response.status})`
+    );
+  }
+
+  return response.json();
+}
+
+export async function getLatestTelemetry(
+  vehicleId: string,
+  token: string
+): Promise<Telemetry | null> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/vehicles/${vehicleId}/telemetry/latest`,
+    {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    }
+  );
+
+  if (response.status === 204) {
+    return null;
+  }
+
+  if (!response.ok) {
+    throw new Error(
+      `Failed to load latest telemetry (${response.status})`
+    );
   }
 
   return response.json();

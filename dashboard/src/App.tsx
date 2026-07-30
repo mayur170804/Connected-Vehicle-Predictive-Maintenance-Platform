@@ -6,8 +6,10 @@ import StatCard from "./components/StatCard";
 
 import {
   getVehicles,
+  getLatestTelemetry,
   login,
   Vehicle,
+  Telemetry,
 } from "./services/api";
 
 import "./styles/app.css";
@@ -26,6 +28,8 @@ export default function App() {
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [vehiclesLoading, setVehiclesLoading] = useState(false);
   const [vehiclesError, setVehiclesError] = useState("");
+  const [telemetryByVehicle, setTelemetryByVehicle] =
+    useState<Record<string, Telemetry | null>>({});
 
 
   useEffect(() => {
@@ -47,18 +51,100 @@ export default function App() {
       return;
     }
 
-    setVehiclesLoading(true);
-    setVehiclesError("");
+    const authToken = token;
 
-    getVehicles(token)
-      .then(setVehicles)
-      .catch(() => {
+    async function loadFleet() {
+      setVehiclesLoading(true);
+      setVehiclesError("");
+
+      try {
+        const vehicleData = await getVehicles(authToken);
+
+        setVehicles(vehicleData);
+
+        const telemetryEntries = await Promise.all(
+          vehicleData.map(async (vehicle) => {
+            try {
+              const telemetry = await getLatestTelemetry(
+                vehicle.id,
+                authToken
+              );
+
+              return [vehicle.id, telemetry] as const;
+            } catch {
+              return [vehicle.id, null] as const;
+            }
+          })
+        );
+
+        setTelemetryByVehicle(
+          Object.fromEntries(telemetryEntries)
+        );
+      } catch {
         setVehiclesError("Unable to load vehicles.");
-      })
-      .finally(() => {
+      } finally {
         setVehiclesLoading(false);
-      });
+      }
+    }
+
+    loadFleet();
   }, [token]);
+
+useEffect(() => {
+  if (!token || vehicles.length === 0) {
+    return;
+  }
+
+  const authToken = token;
+
+  async function refreshTelemetry() {
+    console.log("Polling telemetry...");
+
+    const telemetryEntries = await Promise.all(
+      vehicles.map(async (vehicle) => {
+        try {
+          const telemetry = await getLatestTelemetry(
+            vehicle.id,
+            authToken
+          );
+
+          console.log(
+            "LATEST",
+            vehicle.vin,
+            telemetry?.timestamp,
+            telemetry?.engineTemperature,
+            telemetry?.riskLevel
+          );
+
+          return [vehicle.id, telemetry] as const;
+        } catch (error) {
+          console.error(
+            "Telemetry refresh failed:",
+            vehicle.id,
+            error
+          );
+
+          return [vehicle.id, null] as const;
+        }
+      })
+    );
+
+    const nextTelemetry = Object.fromEntries(telemetryEntries);
+
+    console.log("Updating React state:", nextTelemetry);
+
+    setTelemetryByVehicle(nextTelemetry);
+  }
+
+  const intervalId = window.setInterval(
+    refreshTelemetry,
+    5000
+  );
+
+  return () => {
+    window.clearInterval(intervalId);
+  };
+}, [token, vehicles]);
 
 
   async function handleLogin(username: string, password: string) {
@@ -74,12 +160,17 @@ export default function App() {
 
     setToken(null);
     setVehicles([]);
+    setTelemetryByVehicle({});
   }
 
 
   if (!token) {
     return <Login onLogin={handleLogin} />;
   }
+
+const highRiskCount = Object.values(telemetryByVehicle).filter(
+  (telemetry) => telemetry?.riskLevel === "HIGH"
+).length;
 
 
   return (
@@ -113,7 +204,7 @@ export default function App() {
 
           <StatCard
             label="High Risk"
-            value="--"
+            value={vehiclesLoading ? "..." : highRiskCount}
             description="Requires attention"
           />
 
@@ -178,33 +269,63 @@ export default function App() {
                       <th>VIN</th>
                       <th>Vehicle</th>
                       <th>Year</th>
-                      <th>Registered</th>
+                      <th>Risk</th>
+                      <th>Temperature</th>
+                      <th>Battery</th>
+                      <th>Vibration</th>
+                      <th>Last Update</th>
                     </tr>
                   </thead>
 
                   <tbody>
-                    {vehicles.map((vehicle) => (
-                      <tr key={vehicle.id}>
-                        <td className="vin">
-                          {vehicle.vin}
-                        </td>
+                    {vehicles.map((vehicle) => {
+                      const telemetry = telemetryByVehicle[vehicle.id];
 
-                        <td>
-                          {vehicle.make || "—"}{" "}
-                          {vehicle.model || ""}
-                        </td>
+                      return (
+                        <tr key={vehicle.id}>
+                          <td className="vin">
+                            {vehicle.vin}
+                          </td>
 
-                        <td>
-                          {vehicle.year ?? "—"}
-                        </td>
+                          <td>
+                            {vehicle.make || "—"}{" "}
+                            {vehicle.model || ""}
+                          </td>
 
-                        <td>
-                          {new Date(
-                            vehicle.createdAt
-                          ).toLocaleDateString()}
-                        </td>
-                      </tr>
-                    ))}
+                          <td>
+                            {vehicle.year ?? "—"}
+                          </td>
+
+                          <td>
+                            {telemetry?.riskLevel ?? "—"}
+                          </td>
+
+                          <td>
+                            {telemetry
+                              ? `${telemetry.engineTemperature.toFixed(1)} °C`
+                              : "—"}
+                          </td>
+
+                          <td>
+                            {telemetry
+                              ? `${telemetry.batteryLevel.toFixed(1)}%`
+                              : "—"}
+                          </td>
+
+                          <td>
+                            {telemetry
+                              ? telemetry.vibration.toFixed(1)
+                              : "—"}
+                          </td>
+
+                          <td>
+                            {telemetry
+                              ? new Date(telemetry.timestamp).toLocaleString()
+                              : "No telemetry"}
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
