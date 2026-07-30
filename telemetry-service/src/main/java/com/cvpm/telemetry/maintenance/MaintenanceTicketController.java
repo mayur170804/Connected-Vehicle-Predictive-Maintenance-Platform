@@ -5,6 +5,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/maintenance")
@@ -17,5 +18,13 @@ public class MaintenanceTicketController {
     @PreAuthorize("hasAnyRole('ADMIN', 'OPERATOR')")
     public List<MaintenanceTicket> getTickets() {
         return maintenanceTicketService.getAllTickets();
+    }
+
+    @PatchMapping("/tickets/{ticketId}/resolve")
+    @PreAuthorize("hasAnyRole('ADMIN', 'OPERATOR')")
+    public MaintenanceTicket resolveTicket(
+            @PathVariable UUID ticketId
+    ) {
+        return maintenanceTicketService.resolveTicket(ticketId);
     }
 }

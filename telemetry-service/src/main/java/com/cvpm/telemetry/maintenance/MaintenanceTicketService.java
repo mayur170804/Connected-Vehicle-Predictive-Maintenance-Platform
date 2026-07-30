@@ -7,6 +7,9 @@ import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import java.time.Instant;
+import java.util.UUID;
+import com.cvpm.telemetry.common.ResourceNotFoundException;
 
 import java.util.List;
 
@@ -113,5 +116,34 @@ public class MaintenanceTicketService {
     public List<MaintenanceTicket> getAllTickets() {
         return maintenanceTicketRepository
                 .findAllByOrderByCreatedAtDesc();
+    }
+
+    @Transactional
+    public MaintenanceTicket resolveTicket(UUID ticketId) {
+        MaintenanceTicket ticket = maintenanceTicketRepository
+                .findById(ticketId)
+                .orElseThrow(() ->
+                        new ResourceNotFoundException(
+                                "Maintenance ticket not found: " + ticketId
+                        )
+                );
+
+        if ("RESOLVED".equalsIgnoreCase(ticket.getStatus())) {
+            return ticket;
+        }
+
+        ticket.setStatus("RESOLVED");
+        ticket.setUpdatedAt(Instant.now());
+
+        MaintenanceTicket saved =
+                maintenanceTicketRepository.save(ticket);
+
+        log.info(
+                "maintenance_ticket_resolved ticketId={} vehicleId={}",
+                saved.getId(),
+                saved.getVehicleId()
+        );
+
+        return saved;
     }
 }

@@ -138,68 +138,72 @@ def ensure_vehicles(token):
 
 
 def generate_telemetry(vehicle):
-    # Normal values should remain LOW risk.
+    scenario = random.choices(
+        ["LOW", "MEDIUM", "HIGH"],
+        weights=[75, 15, 10],
+        k=1,
+    )[0]
+
     engine_temperature = round(random.uniform(75, 90), 1)
     battery_level = round(random.uniform(45, 100), 1)
     vibration = round(random.uniform(1, 5), 1)
     mileage = round(random.uniform(20_000, 75_000), 1)
     fault_code = None
 
-    # Occasionally inject a MEDIUM or HIGH risk condition.
-    if random.random() < 0.08:
+    if scenario == "MEDIUM":
         anomaly = random.choice(
             [
-                "medium_temperature",
-                "high_temperature",
-                "vibration",
+                "temperature",
                 "battery",
                 "mileage",
-                "fault",
             ]
         )
 
-        if anomaly == "medium_temperature":
-            # > 90 and <= 105 -> MEDIUM
+        if anomaly == "temperature":
             engine_temperature = round(
                 random.uniform(90.1, 105),
                 1,
             )
 
-        elif anomaly == "high_temperature":
-            # > 105 -> HIGH
-            engine_temperature = round(
-                random.uniform(105.1, 125),
-                1,
-            )
-
-        elif anomaly == "vibration":
-            # > 8 -> HIGH
-            vibration = round(
-                random.uniform(8.1, 12),
-                1,
-            )
-
         elif anomaly == "battery":
-            # < 25 -> MEDIUM
             battery_level = round(
                 random.uniform(5, 24.9),
                 1,
             )
 
         elif anomaly == "mileage":
-            # > 80,000 -> MEDIUM
             mileage = round(
                 random.uniform(80_001, 120_000),
                 1,
             )
 
+    elif scenario == "HIGH":
+        anomaly = random.choice(
+            [
+                "temperature",
+                "vibration",
+                "fault",
+            ]
+        )
+
+        if anomaly == "temperature":
+            engine_temperature = round(
+                random.uniform(105.1, 125),
+                1,
+            )
+
+        elif anomaly == "vibration":
+            vibration = round(
+                random.uniform(8.1, 12),
+                1,
+            )
+
         elif anomaly == "fault":
-            # Matches CRITICAL_FAULT_CODES in risk-service.
             fault_code = random.choice(
                 ["P0217", "P0300"]
             )
 
-    return {
+    event = {
         "vehicleId": vehicle["id"],
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "engineTemperature": engine_temperature,
@@ -208,6 +212,15 @@ def generate_telemetry(vehicle):
         "mileage": mileage,
         "faultCode": fault_code,
     }
+
+    log.info(
+        "telemetry_generated vin=%s scenario=%s",
+        vehicle["vin"],
+        scenario,
+    )
+
+    return event
+
 
 def delivery_report(err, msg):
     if err is not None:
