@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import Header from "./components/Header";
 import Login from "./components/Login";
@@ -76,6 +76,26 @@ export default function App() {
     >("ALL");
 
   /*
+   * New maintenance alert toast
+   */
+  const [
+    maintenanceAlert,
+    setMaintenanceAlert,
+  ] = useState<MaintenanceTicket | null>(
+    null
+  );
+
+  /*
+   * null = ticket list has not been
+   * initialized yet.
+   *
+   * Once loaded, this stores all ticket
+   * IDs seen during the previous refresh.
+   */
+  const knownTicketIdsRef =
+    useRef<Set<string> | null>(null);
+
+  /*
    * Authentication expiry listener
    */
   useEffect(() => {
@@ -90,6 +110,9 @@ export default function App() {
       setShowTicketHistory(false);
       setSearchTerm("");
       setRiskFilter("ALL");
+
+      setMaintenanceAlert(null);
+      knownTicketIdsRef.current = null;
     }
 
     window.addEventListener(
@@ -109,7 +132,9 @@ export default function App() {
    * Backend health check
    */
   useEffect(() => {
-    fetch(`${API_BASE_URL}/actuator/health`)
+    fetch(
+      `${API_BASE_URL}/actuator/health`
+    )
       .then((res) => {
         if (!res.ok) {
           throw new Error(
@@ -128,6 +153,25 @@ export default function App() {
         setStatus("unreachable");
       });
   }, []);
+
+  /*
+   * Automatically hide maintenance
+   * alert after 5 seconds.
+   */
+  useEffect(() => {
+    if (!maintenanceAlert) {
+      return;
+    }
+
+    const timeoutId =
+      window.setTimeout(() => {
+        setMaintenanceAlert(null);
+      }, 5000);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [maintenanceAlert]);
 
   /*
    * Initial dashboard load
@@ -165,9 +209,31 @@ export default function App() {
             ticketData
           );
 
+          /*
+           * Initial tickets are considered
+           * already known.
+           *
+           * We do NOT show toast notifications
+           * for tickets that existed before
+           * the dashboard loaded.
+           */
+          knownTicketIdsRef.current =
+            new Set(
+              ticketData.map(
+                (ticket) => ticket.id
+              )
+            );
+
           console.log(
             "Initial maintenance tickets:",
             ticketData
+          );
+
+          console.log(
+            "Known ticket IDs initialized:",
+            Array.from(
+              knownTicketIdsRef.current
+            )
           );
         } catch (error) {
           console.error(
@@ -176,6 +242,12 @@ export default function App() {
           );
 
           setMaintenanceTickets([]);
+
+          /*
+           * Keep null so the next successful
+           * fetch becomes our initial snapshot.
+           */
+          knownTicketIdsRef.current = null;
         }
 
         /*
@@ -259,7 +331,7 @@ export default function App() {
     async function refreshDashboard() {
       /*
        * Refresh telemetry for ALL
-       * vehicles, regardless of filters.
+       * vehicles regardless of filters.
        */
       const telemetryEntries =
         await Promise.all(
@@ -276,7 +348,8 @@ export default function App() {
                   "LATEST",
                   vehicle.vin,
                   telemetry?.timestamp,
-                  telemetry?.engineTemperature,
+                  telemetry
+                    ?.engineTemperature,
                   telemetry?.riskLevel
                 );
 
@@ -316,6 +389,86 @@ export default function App() {
         const ticketData =
           await getMaintenanceTickets(
             authToken
+          );
+
+        console.log(
+          "Maintenance ticket refresh:",
+          ticketData
+        );
+
+        const previousIds =
+          knownTicketIdsRef.current;
+
+        /*
+         * If we have already loaded a previous
+         * snapshot, detect newly-created OPEN
+         * tickets.
+         */
+        if (previousIds !== null) {
+          const newOpenTickets =
+            ticketData.filter(
+              (ticket) =>
+                ticket.status
+                  ?.toUpperCase() ===
+                  "OPEN" &&
+                !previousIds.has(
+                  ticket.id
+                )
+            );
+
+          console.log(
+            "New open tickets:",
+            newOpenTickets
+          );
+
+          if (
+            newOpenTickets.length > 0
+          ) {
+            /*
+             * If multiple tickets appeared
+             * between polls, show the newest.
+             */
+            const newestTicket =
+              [...newOpenTickets].sort(
+                (a, b) =>
+                  new Date(
+                    b.createdAt
+                  ).getTime() -
+                  new Date(
+                    a.createdAt
+                  ).getTime()
+              )[0];
+
+            console.log(
+              "Showing maintenance toast:",
+              newestTicket
+            );
+
+            setMaintenanceAlert(
+              newestTicket
+            );
+          }
+        } else {
+          /*
+           * First successful ticket response.
+           *
+           * Establish the initial snapshot
+           * without showing notifications.
+           */
+          console.log(
+            "Initializing ticket snapshot."
+          );
+        }
+
+        /*
+         * Store current IDs for comparison
+         * during the next poll.
+         */
+        knownTicketIdsRef.current =
+          new Set(
+            ticketData.map(
+              (ticket) => ticket.id
+            )
           );
 
         setMaintenanceTickets(
@@ -371,12 +524,23 @@ export default function App() {
       );
 
       /*
-       * Reload tickets
-       * after resolving
+       * Reload tickets after resolving.
        */
       const ticketData =
         await getMaintenanceTickets(
           token
+        );
+
+      /*
+       * Synchronize known ticket IDs so
+       * resolving doesn't interfere with
+       * new-ticket detection.
+       */
+      knownTicketIdsRef.current =
+        new Set(
+          ticketData.map(
+            (ticket) => ticket.id
+          )
         );
 
       setMaintenanceTickets(
@@ -409,6 +573,11 @@ export default function App() {
       result.token
     );
 
+    /*
+     * Fresh ticket snapshot after login.
+     */
+    knownTicketIdsRef.current = null;
+
     setToken(result.token);
   }
 
@@ -430,6 +599,9 @@ export default function App() {
     setShowTicketHistory(false);
     setSearchTerm("");
     setRiskFilter("ALL");
+
+    setMaintenanceAlert(null);
+    knownTicketIdsRef.current = null;
   }
 
   /*
@@ -458,7 +630,8 @@ export default function App() {
   const openTicketCount =
     maintenanceTickets.filter(
       (ticket) =>
-        ticket.status?.toUpperCase() ===
+        ticket.status
+          ?.toUpperCase() ===
         "OPEN"
     ).length;
 
@@ -468,7 +641,8 @@ export default function App() {
   const openTickets =
     maintenanceTickets.filter(
       (ticket) =>
-        ticket.status?.toUpperCase() ===
+        ticket.status
+          ?.toUpperCase() ===
         "OPEN"
     );
 
@@ -479,19 +653,22 @@ export default function App() {
     maintenanceTickets
       .filter(
         (ticket) =>
-          ticket.status?.toUpperCase() ===
+          ticket.status
+            ?.toUpperCase() ===
           "RESOLVED"
       )
       .sort((a, b) => {
-        const bTime = new Date(
-          b.updatedAt ??
-            b.createdAt
-        ).getTime();
+        const bTime =
+          new Date(
+            b.updatedAt ??
+              b.createdAt
+          ).getTime();
 
-        const aTime = new Date(
-          a.updatedAt ??
-            a.createdAt
-        ).getTime();
+        const aTime =
+          new Date(
+            a.updatedAt ??
+              a.createdAt
+          ).getTime();
 
         return bTime - aTime;
       })
@@ -753,14 +930,20 @@ export default function App() {
                   <thead>
                     <tr>
                       <th>VIN</th>
-                      <th>Vehicle</th>
+                      <th>
+                        Vehicle
+                      </th>
                       <th>Year</th>
                       <th>Risk</th>
                       <th>
                         Temperature
                       </th>
-                      <th>Battery</th>
-                      <th>Vibration</th>
+                      <th>
+                        Battery
+                      </th>
+                      <th>
+                        Vibration
+                      </th>
                       <th>
                         Last Update
                       </th>
@@ -886,6 +1069,8 @@ export default function App() {
             </span>
           </div>
 
+          {/* Open tickets */}
+
           {openTickets.length === 0 ? (
             <div className="ticketEmptyState">
               No open maintenance
@@ -896,12 +1081,22 @@ export default function App() {
               <table className="vehicleTable">
                 <thead>
                   <tr>
-                    <th>Vehicle</th>
+                    <th>
+                      Vehicle
+                    </th>
                     <th>Risk</th>
-                    <th>Reason</th>
-                    <th>Status</th>
-                    <th>Created</th>
-                    <th>Action</th>
+                    <th>
+                      Reason
+                    </th>
+                    <th>
+                      Status
+                    </th>
+                    <th>
+                      Created
+                    </th>
+                    <th>
+                      Action
+                    </th>
                   </tr>
                 </thead>
 
@@ -1034,13 +1229,19 @@ export default function App() {
                         <th>
                           Vehicle
                         </th>
-                        <th>Risk</th>
+
+                        <th>
+                          Risk
+                        </th>
+
                         <th>
                           Reason
                         </th>
+
                         <th>
                           Status
                         </th>
+
                         <th>
                           Resolved
                         </th>
@@ -1114,6 +1315,62 @@ export default function App() {
           )}
         </section>
       </main>
+
+      {/* New maintenance ticket toast */}
+
+      {maintenanceAlert && (
+        <div className="maintenanceAlertToast">
+          <div className="maintenanceAlertIcon">
+            !
+          </div>
+
+          <div className="maintenanceAlertContent">
+            <div className="maintenanceAlertHeader">
+              <strong>
+                New maintenance alert
+              </strong>
+
+              <button
+                className="maintenanceAlertClose"
+                onClick={() =>
+                  setMaintenanceAlert(
+                    null
+                  )
+                }
+                aria-label="Dismiss alert"
+              >
+                ×
+              </button>
+            </div>
+
+            <p className="maintenanceAlertVehicle">
+              {vehicles.find(
+                (vehicle) =>
+                  vehicle.id ===
+                  maintenanceAlert.vehicleId
+              )?.vin ??
+                maintenanceAlert.vehicleId}
+            </p>
+
+            <div className="maintenanceAlertDetails">
+              {maintenanceAlert.riskLevel && (
+                <span
+                  className={`riskBadge risk${maintenanceAlert.riskLevel.toUpperCase()}`}
+                >
+                  {maintenanceAlert.riskLevel.toUpperCase()}
+                </span>
+              )}
+
+              <span>
+                {maintenanceAlert.reason ||
+                  "Maintenance attention required"}
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Vehicle details */}
 
       {selectedVehicle && (
         <VehicleDetailsModal

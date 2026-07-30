@@ -1335,3 +1335,106 @@ input {
     width: auto;
   }
 }
+
+/* Maintenance alert toast */
+
+.maintenanceAlertToast {
+  position: fixed;
+  top: 96px;
+  right: 28px;
+  z-index: 1000;
+
+  width: min(380px, calc(100vw - 40px));
+
+  display: flex;
+  gap: 14px;
+
+  padding: 16px;
+
+  background: white;
+
+  border: 1px solid #fecdca;
+  border-left: 4px solid #d92d20;
+  border-radius: 10px;
+
+  box-shadow:
+    0 12px 28px rgba(16, 24, 40, 0.16);
+}
+
+.maintenanceAlertIcon {
+  width: 34px;
+  height: 34px;
+  flex-shrink: 0;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  border-radius: 50%;
+
+  background: #fef3f2;
+  color: #b42318;
+
+  font-weight: 800;
+}
+
+.maintenanceAlertContent {
+  flex: 1;
+  min-width: 0;
+}
+
+.maintenanceAlertHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+
+  color: #101828;
+
+  font-size: 14px;
+}
+
+.maintenanceAlertClose {
+  padding: 0;
+
+  border: 0;
+  background: transparent;
+
+  color: #667085;
+
+  cursor: pointer;
+
+  font-size: 20px;
+  line-height: 1;
+}
+
+.maintenanceAlertVehicle {
+  margin: 5px 0 9px;
+
+  color: #344054;
+
+  font-family: monospace;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.maintenanceAlertDetails {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+
+  color: #667085;
+
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+@media (max-width: 600px) {
+  .maintenanceAlertToast {
+    top: 88px;
+    right: 16px;
+    left: 16px;
+
+    width: auto;
+  }
+}
