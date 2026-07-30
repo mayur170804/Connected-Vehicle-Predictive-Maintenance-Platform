@@ -1,12 +1,19 @@
-import { useEffect, useState } from "react";
-import TelemetryCharts from "./TelemetryCharts";
+import { useEffect, useMemo, useState } from "react";
+
+import {
+  Line,
+  LineChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
 
 import {
   Vehicle,
   Telemetry,
   getTelemetryHistory,
 } from "../services/api";
-
 
 interface Props {
   vehicle: Vehicle;
@@ -36,6 +43,12 @@ export default function VehicleDetailsModal({
           token
         );
 
+        /*
+         * Keep latest 20 readings.
+         *
+         * We sort newest -> oldest first so we can
+         * take the latest 20.
+         */
         const latest = [...data]
           .sort(
             (a, b) =>
@@ -51,7 +64,9 @@ export default function VehicleDetailsModal({
           error
         );
 
-        setError("Unable to load telemetry history.");
+        setError(
+          "Unable to load telemetry history."
+        );
       } finally {
         setLoading(false);
       }
@@ -59,6 +74,36 @@ export default function VehicleDetailsModal({
 
     loadHistory();
   }, [vehicle.id, token]);
+
+  /*
+   * Charts should run oldest -> newest,
+   * so time progresses left to right.
+   */
+  const chartData = useMemo(() => {
+    return [...history]
+      .reverse()
+      .map((item) => ({
+        id: item.id,
+        timestamp: item.timestamp,
+
+        time: new Date(
+          item.timestamp
+        ).toLocaleTimeString([], {
+          hour: "2-digit",
+          minute: "2-digit",
+          second: "2-digit",
+        }),
+
+        engineTemperature:
+          item.engineTemperature,
+
+        batteryLevel:
+          item.batteryLevel,
+
+        vibration:
+          item.vibration,
+      }));
+  }, [history]);
 
   const risk =
     latestTelemetry?.riskLevel?.toUpperCase() ??
@@ -75,6 +120,8 @@ export default function VehicleDetailsModal({
           event.stopPropagation()
         }
       >
+        {/* Header */}
+
         <div className="vehicleModalHeader">
           <div>
             <p className="modalEyebrow">
@@ -102,6 +149,8 @@ export default function VehicleDetailsModal({
         </div>
 
         <div className="vehicleModalContent">
+          {/* Latest telemetry */}
+
           <section>
             <div className="detailSectionHeader">
               <h3>Latest Telemetry</h3>
@@ -165,14 +214,66 @@ export default function VehicleDetailsModal({
             )}
           </section>
 
-          {!loading && !error && history.length > 0 && (
-            <TelemetryCharts history={history} />
-          )}
+          {/* Telemetry trends */}
+
+          <section className="telemetryTrendsSection">
+            <div className="detailSectionHeader">
+              <div>
+                <h3>Telemetry Trends</h3>
+
+                <p>
+                  Recent readings for engine
+                  temperature, battery and
+                  vibration.
+                </p>
+              </div>
+            </div>
+
+            {loading ? (
+              <div className="modalEmptyState">
+                Loading telemetry trends...
+              </div>
+            ) : error ? (
+              <div className="modalEmptyState">
+                {error}
+              </div>
+            ) : chartData.length === 0 ? (
+              <div className="modalEmptyState">
+                No telemetry data available.
+              </div>
+            ) : (
+              <div className="telemetryCharts">
+                <TelemetryChart
+                  title="Engine Temperature"
+                  data={chartData}
+                  dataKey="engineTemperature"
+                  unit="°C"
+                />
+
+                <TelemetryChart
+                  title="Battery Level"
+                  data={chartData}
+                  dataKey="batteryLevel"
+                  unit="%"
+                />
+
+                <TelemetryChart
+                  title="Vibration"
+                  data={chartData}
+                  dataKey="vibration"
+                  unit=""
+                />
+              </div>
+            )}
+          </section>
+
+          {/* History */}
 
           <section className="telemetryHistorySection">
             <div className="detailSectionHeader">
               <div>
                 <h3>Telemetry History</h3>
+
                 <p>
                   Latest 20 readings for this
                   vehicle.
@@ -242,7 +343,9 @@ export default function VehicleDetailsModal({
                         </td>
 
                         <td>
-                          {item.vibration.toFixed(1)}
+                          {item.vibration.toFixed(
+                            1
+                          )}
                         </td>
 
                         <td>
@@ -262,6 +365,10 @@ export default function VehicleDetailsModal({
   );
 }
 
+/*
+ * Latest telemetry detail card
+ */
+
 function Detail({
   label,
   value,
@@ -273,6 +380,117 @@ function Detail({
     <div className="telemetryDetail">
       <p>{label}</p>
       <strong>{value}</strong>
+    </div>
+  );
+}
+
+/*
+ * Reusable telemetry chart
+ */
+
+interface ChartData {
+  id: string;
+  timestamp: string;
+  time: string;
+  engineTemperature: number;
+  batteryLevel: number;
+  vibration: number;
+}
+
+function TelemetryChart({
+  title,
+  data,
+  dataKey,
+  unit,
+}: {
+  title: string;
+  data: ChartData[];
+  dataKey:
+    | "engineTemperature"
+    | "batteryLevel"
+    | "vibration";
+  unit: string;
+}) {
+  return (
+    <div className="telemetryChartCard">
+      <div className="telemetryChartHeader">
+        <h4>{title}</h4>
+
+        <span>
+          {data.length} readings
+        </span>
+      </div>
+
+      <div className="telemetryChart">
+        <ResponsiveContainer
+          width="100%"
+          height="100%"
+        >
+          <LineChart
+            data={data}
+            margin={{
+              top: 10,
+              right: 12,
+              left: -10,
+              bottom: 0,
+            }}
+          >
+            <XAxis
+              dataKey="time"
+              tick={{
+                fontSize: 10,
+              }}
+              tickLine={false}
+              axisLine={false}
+              minTickGap={30}
+            />
+
+            <YAxis
+              tick={{
+                fontSize: 10,
+              }}
+              tickLine={false}
+              axisLine={false}
+              width={50}
+              domain={["auto", "auto"]}
+            />
+
+            <Tooltip
+              labelFormatter={(
+                _label,
+                payload
+              ) => {
+                const timestamp =
+                  payload?.[0]?.payload
+                    ?.timestamp;
+
+                return timestamp
+                  ? new Date(
+                      timestamp
+                    ).toLocaleString()
+                  : "";
+              }}
+              formatter={(value) => [
+                `${Number(value).toFixed(
+                  1
+                )}${unit}`,
+                title,
+              ]}
+            />
+
+            <Line
+              type="monotone"
+              dataKey={dataKey}
+              stroke="#2563eb"
+              strokeWidth={2}
+              dot={false}
+              activeDot={{
+                r: 4,
+              }}
+            />
+          </LineChart>
+        </ResponsiveContainer>
+      </div>
     </div>
   );
 }
